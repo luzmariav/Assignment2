@@ -1,0 +1,368 @@
+---
+title: "Assignment 2"
+subtitle: "Due at 11:59pm on October 3."
+format: pdf
+editor: visual
+---
+
+GitHub Link: https://github.com/luzmariav/Assignment2/blob/main/assignment2.qmd
+
+```{r}
+#| message = FALSE
+library(tidyverse)
+library(gtrendsR)
+library(censusapi)
+```
+
+## Pulling from APIs
+
+Our first data source is the Google Trends API. Suppose we are interested in the search trends for `crime` and `loans` in Illinois in the year 2020. We could find this using the following code:
+
+```{r}
+res <- gtrends(c("crime", "loans"), 
+               geo = "US-IL", 
+               time = "2020-01-01 2020-12-31", 
+               low_search_volume = TRUE)
+plot(res)
+```
+
+Answer the following questions for the keywords "crime" and "loans".
+
+-   Find the mean, median and variance of the search hits for the keywords.
+
+-   Which cities (locations) have the highest search frequency for `loans`? Note that there might be multiple rows for each city if there were hits for both "crime" and "loans" in that city. It might be easier to answer this question if we had the search hits info for both search terms in two separate variables. That is, each row would represent a unique city.
+
+-   Is there a relationship between the search intensities between the two keywords we used?
+
+Repeat the above for keywords related to covid. Make sure you use multiple keywords like we did above. Try several different combinations and think carefully about words that might make sense within this context.
+
+```{r}
+#Loans and Crime
+
+LoansCrimeStats <- res$interest_over_time %>% 
+  group_by(keyword) %>% 
+  summarise(Mean= mean(hits),
+            Median = median(hits, na.rm = T),
+            SD = sd(hits, na.rm = T),
+            Variance= var(hits, na.rm= T))
+
+```
+
+```{r, echo=FALSE}
+print(LoansCrimeStats)
+```
+
+```{r}
+LoansCityStats <- res$interest_by_city %>%
+  filter(keyword=='loans') %>% 
+  arrange(desc(hits))
+
+
+```
+
+```{r, echo=FALSE}
+head(LoansCityStats)
+
+res$interest_by_city <- res$interest_by_city %>% 
+  mutate(hits = ifelse(is.na(hits), 0, hits))
+```
+
+```{r}
+
+CityStats <- res$interest_by_city %>%
+  pivot_wider(names_from = keyword, values_from = hits) %>% 
+  mutate(crime = ifelse(is.na(crime), 0, crime)) %>%
+  mutate(loans = ifelse(is.na(loans), 0, loans)) 
+  
+CityCor <- cor(CityStats$crime, CityStats$loans, use = "complete")
+
+InterestOverTimeStats <- res$interest_over_time %>%
+  pivot_wider(names_from = keyword, values_from = hits) %>% 
+  mutate(crime = ifelse(is.na(crime), 0, crime)) %>%
+  mutate(loans = ifelse(is.na(loans), 0, loans)) 
+TimeCor <- cor(InterestOverTimeStats$crime, InterestOverTimeStats$loans, use = "complete")
+
+```
+
+```{r, echo=FALSE}
+CityCor
+TimeCor
+
+plot(crime ~ loans, data = CityStats)
+plot(crime ~ loans, data = InterestOverTimeStats)
+
+```
+
+**Description for Crimes and Loans:**
+
+The Google search between crimes and loans in Illinois, USA has an interesting trend. The average normalized hits for crime was 54.6 with a median of 54 (var=77.2) while for loans it was 66.1 with a median of 66 (Var=104). There was a higher search for loans but with the high variance, there is no concrete conclusion. There were a couple of cities that had high search for loans. The city with the highest search frequency for loans was Justice. The cities that follow it were not significantly high as Justice, more than half the search frequencies. The cities are Roodhouse, Glasford, and Rosemont. The cities that follow these are not quite as high for 40 or less. The correlation between the search frequencies over the period of time January 2020 to January 2021 was -0.06 which indicates a weak negative correlation between the search of crime and loans over this time period. There was a slight decrease in the search between these two factors over the period of time. According to the plot there were some cycles where the crime searches were low in the spring time and very high in the summer period and then it decreased into fall and winter. This translates to a negative correlation but the cycles are what make the correlation weak. For the correlation between crime and loans in the basis of the cities, the correlation was -0.22. This is a stronger negative correlation compared to the time based one but the correlation is still not very strong. There seems to be a slight correlation between these terms and where a person lives. This may be explained by the cities' wealth and how likely people are looking for loans and crime.
+
+```{r}
+#Covid, Quarantine, and Isolation
+
+covid <- gtrends(c("covid19","isolation", "quarantine"),
+                 geo = "US-IL",
+                 time = "2020-01-01 2020-12-31",
+                 low_search_volume = TRUE)
+
+covid1 <- covid$interest_over_time %>% 
+  mutate(hits = as.numeric(replace(hits, hits == '<1', 0.5)))
+
+covidstats <- covid1 %>% 
+  group_by(keyword) %>% 
+  summarise(Mean= mean(hits),
+            Median = median(hits, na.rm = T),
+            SD = sd(hits, na.rm = T),
+            Variance= var(hits, na.rm= T))
+
+
+```
+
+```{r, echo=FALSE}
+plot(covid)
+print(covidstats)
+```
+
+```{r}
+covidcity <- covid$interest_by_city %>%
+  filter(keyword=='covid19') %>% 
+  arrange(desc(hits))
+```
+
+```{r, echo=FALSE}
+head(covidcity)
+
+```
+
+```{r}
+
+
+covidCityStats <- covid$interest_by_city %>% 
+  distinct(keyword, location, .keep_all = TRUE) %>% 
+  pivot_wider(names_from = keyword, values_from = hits) %>% 
+  mutate(across(c("covid19", "quarantine", "isolation"), ~replace(., is.na(.), 0))) 
+  
+
+covidCityCor <- cor(covidCityStats$covid19, covidCityStats$quarantine, use = "complete")
+covidCityCor2 <- cor(covidCityStats$covid19, covidCityStats$isolation, use = "complete")
+
+
+covidInterestOverTimeStats <- covid1 %>%
+  pivot_wider(names_from = keyword, values_from = hits, values_fn = list) %>% 
+  mutate(across(c("covid19", "quarantine", "isolation"), ~replace(., is.na(.), 0))) %>% 
+  mutate(across(c("covid19", "quarantine", "isolation"), as.numeric))
+  
+
+covidTimeCor1 <- cor(covidInterestOverTimeStats$covid19, covidInterestOverTimeStats$quarantine, use = "complete")
+
+covidTimeCor2 <- cor(covidInterestOverTimeStats$covid19, covidInterestOverTimeStats$isolation, use = "complete")
+
+```
+
+```{r, echo=FALSE}
+covidCityCor
+covidCityCor2
+
+covidTimeCor1
+covidTimeCor2
+
+plot(covid19 ~ isolation, data = covidCityStats)
+plot(covid19 ~ quarantine, data = covidCityStats)
+
+plot(covid19 ~ isolation, data = covidInterestOverTimeStats)
+plot(covid19 ~ quarantine, data = covidInterestOverTimeStats)
+```
+
+**Description of COVID, Quarantine, and Isolation:**
+
+The Google trends between COVID-19 searches with quarantine and isolation in Illinois, USA during the year 2020 have an interesting trend. Covid-19 had just become a pandemic in this year and people with it were expected to go into isolation and quarantine themselves, which is why we chose these keywords. We only looked at the correlations between covid-19 and the other keywords because we want to focus on covid-19 as the principal keyword. The average normalized hits for covid-19 was 10 with a median of 4 (var=260). The average normalized hits for isolation is 2.21 with a median of 2 (var=1.23) while for quarantine is 20.1 with a median of 16.5 (var=302). There was a higher search for quarantine compared to the other two keywords which might be that people were more worried about quarantine when compared to Covid-19 and test. The keywords of covid-19 and quarantine had high variance which may be from the very high frequency of searches around spring of 2020. The keyword test had a similar search frequencies in that year but there was a peak around April, which explains the small variance. There were a couple of cities that had high searches for the keyword Covid-19. The city with the highest search frequency for covid-19 was Flora, closely followed by Morrison, Metamora, Wonder Lake, Greenville, and Oregon. The cities that follow these are not quite as high for 69 or less. The correlation between the search frequencies for covid-19 and quarantine over the period of time January 2020 to January 2021 was 0.89 which indicates a strong positive correlation. The strong correlation shows that the covid-19 and quarantine were strongly linked in searches and grew consistently throughout the year. In addition, the correlation between covid-19 and isolation on the basis of time was also strongly positive at 0.90. This also indicates a strong link between these two word searches throughout the year. On the other hand, on the basis of cities, the correlations were weak. The correlation between covid-19 and quarantine on the basis of the cities was 0.0029 which was weakly positive. This indicates there is no trend among the cities that search these keywords. The correlation between covid-19 and isolation on the basis of the cities was also weakly positive at 0.052. These values are so close to zero that they do not show anything concrete. These correlations may indicate that these keywords were searched consistently between cities.
+
+## Google Trends + ACS
+
+Now lets add another data set. The `censusapi` package provides a nice R interface for communicating with this API. However, before running queries we need an access key. This (easy) process can be completed here:
+
+<https://api.census.gov/data/key_signup.html>
+
+Once you have an access key, store this key in the `cs_key` object. We will use this object in all following API queries.
+
+```{r}
+
+cs_key <- "4352b9f2c5d17d55b1f580bb631924568f03f3ff"
+```
+
+In the following, we request basic socio-demographic information (population, median age, median household income, income per capita) for cities and villages in the state of Illinois.
+
+```{r}
+
+
+acs_il <- getCensus(name = "acs/acs5",
+                    vintage = 2020,
+                    vars = c("NAME",
+                             "B01001_001E",
+                             "B06002_001E",
+                             "B19013_001E",
+                             "B19301_001E"),
+                    region = "place:*",
+                    regionin = "state:17",
+                    key = cs_key)
+head(acs_il)
+
+
+```
+
+Convert values that represent missings to NAs.
+
+```{r}
+
+
+acs_il[acs_il == -666666666] <- NA
+
+
+```
+
+Now, it might be useful to rename the socio-demographic variables (`B01001_001E` etc.) in our data set and assign more meaningful names.
+
+```{r}
+
+acs_il <-
+  acs_il %>%
+  rename(pop = B01001_001E,
+         age = B06002_001E,
+         hh_income = B19013_001E,
+         income = B19301_001E)
+
+```
+
+It seems like we could try to use this location information listed above to merge this data set with the Google Trends data. However, we first have to clean `NAME` so that it has the same structure as `location` in the search interest by city data. Add a new variable `location` to the ACS data that only includes city names.
+
+Answer the following questions with the "crime" and "loans" Google trends data and the ACS data.
+
+-   First, check how many cities don't appear in both data sets, i.e. cannot be matched. Then, create a new data set by joining the Google Trends and the ACS data. Keep only cities that appear in both data sets.
+
+-   Compute the mean of the search popularity for both keywords for cities that have an above average median household income and for those that have an below average median household income. When building your pipe, start with creating the grouping variable and then proceed with the remaining tasks. What conclusions might you draw from this?
+
+-   Is there a relationship between the median household income and the search popularity of the Google trends terms? Describe the relationship and use a scatterplot with `qplot()`.
+
+Repeat the above steps using the covid data and the ACS data.
+
+```{r}
+#Crime and loans
+
+no_village <- gsub(' village, Illinois', '', acs_il$NAME)
+
+no_city <- gsub(' city, Illinois', '', no_village)
+
+acs_with_location <- acs_il %>%  mutate(location = no_city)
+acs_with_location %>%  head (5)
+
+Citiesnotindata <- anti_join(acs_with_location, CityStats)
+
+Mergeddata <- inner_join(acs_with_location, CityStats)
+
+MergeddataKW <- inner_join(acs_with_location,res$interest_by_city)
+```
+
+```{r, echo=FALSE}
+count(Citiesnotindata)
+count(Mergeddata)
+```
+
+```{r}
+Mergeddata <- Mergeddata %>% 
+  mutate(as.numeric(hh_income)) %>% 
+  mutate(as.numeric(loans)) %>% 
+  mutate(as.numeric(crime))
+
+MedianHHIncome <- median(Mergeddata$hh_income, na.rm = TRUE)
+
+Mergeddata2 <- Mergeddata %>%
+  mutate(incomecat = if_else(hh_income > MedianHHIncome, "1", "0"))
+  
+Mergeddatamedian <- Mergeddata2 %>% 
+  group_by(incomecat) %>% 
+  summarise(CrimeMean=mean(crime, na.rm =T),
+            LoanMean=mean(loans, na.rm =T))
+
+qplot(x = hh_income, y = hits, data = MergeddataKW, 
+      geom = "point", color = keyword) +
+  labs(
+    x = "Median Household Income",
+    y = "Search Popularity",
+    title = "Relationship Between Median Household Income and Search Popularity"
+  )
+
+IncomeCrimeCor <- cor(Mergeddata$crime, Mergeddata$hh_income, use = "complete")
+IncomeLoanCor <- cor(Mergeddata$loans, Mergeddata$hh_income, use = "complete")
+
+
+```
+
+```{r, echo=FALSE}
+print(Mergeddatamedian)
+MedianHHIncome
+IncomeCrimeCor
+IncomeLoanCor 
+```
+
+**Description of Crime and Loans:**
+
+To understand better the trends between crime and loans, the location statistics were added to the Google trends data set, we specifically looked at the median income for each location including cities and towns. Between the ACS data set and the Google trends data set there were 325 locations that overlap while there were 1141 locations that were not in both data sets. The median household income for these overlapping locations was 57292 and the locations were grouped based on being lower (0) or higher (1) than this median income. For households lower than the median, the crime mean frequency was 9.7 while for households with higher incomes than the median it was 14.7. This indicates that households with higher incomes are searching crime more than those that have lower incomes. It may mean that they are being more vigilant on crime news. For the loan frequencies, the household with a lower income compared to the median had an average search frequency of 20.6 while the higher income had a search frequency of 14.9. This may indicate that the lower income homes are searching for information on loans and that they are more likely to use loans. The correlation between loan search frequencies and income is -0.15 which indicates a weak negative correlation. This means that as you increase household income, the frequency of loan search decreases. This relationship is very weak so it is not a strong statistic to draw conclusions between loan usage and household income. But this does correlate to the averages found before. The correlation between crime search frequencies and income is 0.23 which indicates a weak positive correlation. This indicates that as you increase household income, the search frequency for crime increases. This again supports the finding in the averages as mentioned previously. The correlations between these two factors are stronger than with loans but it still not strong, which makes it hard to draw definite conclusions between the data sets.
+
+```{r}
+# COVID, Quarantine, Isolation
+
+Citiesnotincoviddata <- anti_join(acs_with_location, covidCityStats)
+count(Citiesnotincoviddata)
+
+MergeddataCOVID <- inner_join(acs_with_location, covidCityStats)
+count(MergeddataCOVID)
+
+MergeddataCOVIDKW <- inner_join(acs_with_location, covid$interest_by_city)
+
+MergeddataCOVID <- MergeddataCOVID %>% 
+  mutate(as.numeric(hh_income)) %>% 
+  mutate(as.numeric(covid19)) %>% 
+  mutate(as.numeric(quarantine)) %>% 
+  mutate(as.numeric(isolation))
+
+MedianHHIncomeCOVID <- median(MergeddataCOVID$hh_income, na.rm = TRUE)
+
+MergeddataCOVID2 <- MergeddataCOVID %>%
+  mutate(incomecat = if_else(hh_income > MedianHHIncome, "1", "0"))
+
+MergeddataCOVIDmedian <- MergeddataCOVID2 %>% 
+  group_by(incomecat) %>% 
+  summarise(COVIDMean=mean(covid19, na.rm =T),
+            QuarantineMean=mean(quarantine, na.rm =T),
+            IsolationMean=mean(isolation, na.rm =T))
+
+qplot(x = hh_income, y = hits, data = MergeddataCOVIDKW, 
+      geom = "point", color = keyword) +
+  labs(
+    x = "Median Household Income",
+    y = "Search Popularity",
+    title = "Relationship Between Median Household Income and Search Popularity"
+  )
+
+IncomecovidCor <- cor(MergeddataCOVID$covid19, MergeddataCOVID$hh_income, use = "complete")
+IncomequarantineCor <- cor(MergeddataCOVID$quarantine, MergeddataCOVID$hh_income, use = "complete")
+IncomeisolationCor <- cor(MergeddataCOVID$isolation, MergeddataCOVID$hh_income, use = "complete")
+
+
+```
+
+```{r, echo=FALSE}
+print(MergeddataCOVIDmedian)
+MedianHHIncomeCOVID
+IncomecovidCor
+IncomequarantineCor
+IncomeisolationCor
+```
+
+**Description of Covid-19, Quarantine, and Isolation:**
+
+To understand better the trends between the keywords covid-19, quarantine, and isolation the location statistics were added to the Google trends data set, we specifically look at the median income for each location including cities and towns. Between the ACS data set and the Google trends data set there were 427 locations that overlapped while there were 1039 locations that were not in both data sets. The median household income for these overlapping locations was 60288 and the locations were grouped based on being lower (0) or higher (1) than this median income.
+
+For households lower than the median, the covid-19 mean frequency was 6.44 while for households with higher incomes than the median it was 13.2. This indicates that households with higher incomes are searching covid-19 more than those that have lower incomes. It may mean that they may want to be more informed concerning the topics of covid-19. For the quarantine frequencies, the household with a lower income compared to the median had an average search frequency of 6.9 while the higher income had a search frequency of 21.1. This again correlates to the previous keyword, where people with higher incomes are looking at quarantine more which may show that they are more worried about it or that they are trying to find the guidelines for quarantine. The trend is the same for the isolation keyword. The lower median income average was 3.33 while for the higher income average was 7.72. It does not look significantly higher compared to the other averages but it does show that higher income people may be looking for covid-19 tests more.
+
+The correlation between covid-19 search frequencies and income is 0.138 which indicates a weak positive correlation. This means that as you increase household income, the frequency of covid-19 searches increase. This relationship is pretty weak so it is not a strong statistic to draw conclusions between covid-19 and household income. But this does correlate to the averages found before. It may signify that households with more income are more worried about covid-19. The correlation between quarantine search frequencies and income is 0.43 which indicates a positive correlation. This indicates that as you increase household income, the search frequency for quarantine increases. This again supports the finding in the averages as mentioned previously. The correlation between these two factors is stronger than with covid-19 meaning the correlation is decently strong correlation. This may signify that households with higher incomes are looking for quarantine guidelines more or are more worried about being in quarantine. The correlation between isolation search frequencies and income is 0.17 which indicates a weak positive correlation. This correlation is the weakest of all of them which indicates that there really is not a correlation between searching for isolation and income. It may mean that people of all incomes are looking at isolation equally. The scatter plot clearly shows these correlation trends that have been previous mentioned.
